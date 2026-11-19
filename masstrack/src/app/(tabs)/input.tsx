@@ -261,7 +261,6 @@ function GuidedInput({ activeProjectId }: { activeProjectId: string | null }) {
         species,
         dbh_cm: toCentimetres(individual.dbh, individual.dbhUnit),
         height_m: individual.height.trim() ? toMetres(individual.height, individual.heightUnit) : null,
-        basal_area_cm2: basalArea,
         results: { basal_area: basalArea },
         date_created: timestamp,
       };

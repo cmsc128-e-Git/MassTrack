@@ -11,8 +11,9 @@ export type Entry = {
   species: string;
   dbh_cm: number;
   height_m: number | null;
-  basal_area_cm2: number;
-  // Per-individual equation outputs. Older rows have none.
+  // Legacy: rows saved before results existed. New rows keep basal area in results only.
+  basal_area_cm2?: number;
+  // Per-individual equation outputs, keyed by registry formula name (e.g. basal_area).
   results?: Record<string, number>;
   date_created: string;
 };
