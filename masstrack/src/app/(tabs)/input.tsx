@@ -204,7 +204,7 @@ function GuidedInput({ activeProjectId }: { activeProjectId: string | null }) {
       Alert.alert("Check species details", `Select a species and enter between 1 and ${MAX_INDIVIDUALS} individuals.`);
       return false;
     }
-    if (step >= 2 && visibleIndividuals.some((individual) =>
+    if (step === 1 && visibleIndividuals.some((individual) =>
       !isPositiveNumber(individual.dbh) ||
       !Number.isFinite(toCentimetres(individual.dbh, individual.dbhUnit)) ||
       (individual.height.trim() && (!isPositiveNumber(individual.height) || !Number.isFinite(toMetres(individual.height, individual.heightUnit)))),
@@ -253,7 +253,7 @@ function GuidedInput({ activeProjectId }: { activeProjectId: string | null }) {
       return;
     }
     const timestamp = new Date().toISOString();
-    const entries: Entry[] = visibleIndividuals.map((individual, index) => {
+    const preparedEntries: Entry[] = visibleIndividuals.map((individual, index) => {
       const basalArea = basalAreas[index]!;
       return {
         entry_id: createUuid(),
@@ -264,6 +264,7 @@ function GuidedInput({ activeProjectId }: { activeProjectId: string | null }) {
         date_created: timestamp,
       };
     });
+    const entries = preparedEntries;
     const calculation: Calculation = {
       calculation_id: createUuid(),
       species,
@@ -283,7 +284,7 @@ function GuidedInput({ activeProjectId }: { activeProjectId: string | null }) {
     const emptyMeasurements = Array.from({ length: visibleIndividuals.length }, emptyIndividual);
     saveInputDraft(activeProjectId, buildDraft(emptyMeasurements));
     setIndividuals(emptyMeasurements);
-    setCurrentStep(2);
+    setCurrentStep(1);
     Alert.alert("Calculation saved", `${entries.length} ${entries.length === 1 ? "individual" : "individuals"} added to the data sheet.`);
   }
 
@@ -303,21 +304,30 @@ function GuidedInput({ activeProjectId }: { activeProjectId: string | null }) {
       case 0:
         return <SiteStep siteName={siteName} setSiteName={setSiteName} location={location} setLocation={setLocation} plotNumber={plotNumber} setPlotNumber={setPlotNumber} samplingMethod={samplingMethod} setSamplingMethod={setSamplingMethod} />;
       case 1:
-        return <SpeciesStep species={species} setSpecies={setSpecies} individualCount={individualCount} setIndividualCount={(value) => {
-          setIndividualCount(value);
-          const count = Number(value);
-          if (Number.isInteger(count) && count > 0 && count <= MAX_INDIVIDUALS) {
-            setIndividuals((current) => Array.from({ length: count }, (_, index) => current[index] ?? emptyIndividual()));
-          }
-        }} />;
-      case 2:
-        return <MeasureStep
+        return <SpeciesStep
           species={species}
+          setSpecies={setSpecies}
+          individualCount={individualCount}
+          setIndividualCount={(value) => {
+            setIndividualCount(value);
+            const count = Number(value);
+            if (Number.isInteger(count) && count > 0 && count <= MAX_INDIVIDUALS) {
+              setIndividuals((current) => Array.from({ length: count }, (_, index) => current[index] ?? emptyIndividual()));
+            }
+          }}
           individuals={visibleIndividuals}
-          // Map the visible list, not the stored one: a restored draft can store fewer rows than it shows, which dropped edits.
           onIndividualChange={(index, field, value) => setIndividuals(
             visibleIndividuals.map((individual, row) => row === index ? { ...individual, [field]: value } : individual),
           )}
+          onAddIndividual={() => {
+            if (visibleIndividuals.length >= MAX_INDIVIDUALS) return;
+            const nextCount = visibleIndividuals.length + 1;
+            setIndividualCount(String(nextCount));
+            setIndividuals((current) => [...current.slice(0, nextCount - 1), emptyIndividual()]);
+          }}
+        />;
+      case 2:
+        return <MeasureStep
           equations={equations}
           setEquations={setEquations}
           onAddEquation={() => {
@@ -390,15 +400,114 @@ function SiteStep(props: SiteStepProps) {
   return <View style={styles.stepContent}><TextField label="Site name *" value={props.siteName} onChangeText={props.setSiteName} placeholder="e.g. UP Arboretum" /><TextField label="Location *" value={props.location} onChangeText={props.setLocation} placeholder="Municipality, province" /><TextField label="Plot number *" value={props.plotNumber} onChangeText={props.setPlotNumber} placeholder="e.g. Plot 01" /><Field label="Sampling method *"><Dropdown label="Sampling method" value={props.samplingMethod} options={SAMPLING_METHODS} onChange={props.setSamplingMethod} /></Field></View>;
 }
 
-function SpeciesStep({ species, setSpecies, individualCount, setIndividualCount }: { species: string; setSpecies: (v: string) => void; individualCount: string; setIndividualCount: (v: string) => void }) {
+type SpeciesStepProps = {
+  species: string;
+  setSpecies: (v: string) => void;
+  individualCount: string;
+  setIndividualCount: (v: string) => void;
+  individuals: IndividualMeasurement[];
+  onIndividualChange: (index: number, field: keyof IndividualMeasurement, value: string) => void;
+  onAddIndividual: () => void;
+};
+
+function SpeciesStep(props: SpeciesStepProps) {
   const c = useColors();
-  return <View style={styles.stepContent}><View style={[styles.card, { backgroundColor: c.surface, borderColor: c.border }]}><View style={styles.cardHeading}><View style={[styles.equationBadge, { backgroundColor: c.bg, borderColor: c.border }]}><Text style={[styles.badgeText, { color: c.muted }]}>01</Text></View><View style={styles.cardTitleBlock}><Text style={[styles.cardTitle, { color: c.text }]}>Organism</Text><Text style={[styles.formula, { color: c.muted }]}>Each individual will have its own measurements.</Text></View></View><View style={[styles.divider, { backgroundColor: c.border }]} /><Field label="Species *"><Dropdown label="Species" value={species} options={SPECIES} onChange={setSpecies} /></Field><TextField label={`Number of individuals (1–${MAX_INDIVIDUALS}) *`} value={individualCount} onChangeText={setIndividualCount} placeholder="1" numeric /></View></View>;
+  const [individualsOpen, setIndividualsOpen] = useState(true);
+  return (
+    <View style={styles.stepContent}>
+      <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.border }]}>
+        <View style={styles.cardHeading}>
+          <View style={[styles.equationBadge, { backgroundColor: c.bg, borderColor: c.border }]}>
+            <Text style={[styles.badgeText, { color: c.muted }]}>01</Text>
+          </View>
+          <View style={styles.cardTitleBlock}>
+            <Text style={[styles.cardTitle, { color: c.text }]}>Organism</Text>
+            <Text style={[styles.formula, { color: c.muted }]}>Set the species and enter data for each individual.</Text>
+          </View>
+        </View>
+        <View style={[styles.divider, { backgroundColor: c.border }]} />
+        <Field label="Species *">
+          <Dropdown label="Species" value={props.species} options={SPECIES} onChange={props.setSpecies} />
+        </Field>
+        <TextField
+          label={`Number of individuals (1–${MAX_INDIVIDUALS}) *`}
+          value={props.individualCount}
+          onChangeText={props.setIndividualCount}
+          placeholder="1"
+          numeric
+        />
+        <View style={[styles.divider, { backgroundColor: c.border }]} />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: individualsOpen }}
+          accessibilityLabel={`${individualsOpen ? "Collapse" : "Expand"} individuals`}
+          onPress={() => setIndividualsOpen((open) => !open)}
+          style={styles.accordionHeader}
+        >
+          <Text style={[styles.cardTitle, { color: c.text }]}>Individuals</Text>
+          <Text style={[styles.formula, { color: c.muted }]}>{props.individuals.length} {props.individuals.length === 1 ? "entry" : "entries"}</Text>
+          <SymbolView
+            name={icon(individualsOpen ? "chevron.up" : "chevron.down", individualsOpen ? "expand_less" : "expand_more")}
+            tintColor={c.muted}
+            size={20}
+          />
+        </Pressable>
+
+        {individualsOpen && (
+          <ScrollView
+            style={styles.individualScroll}
+            contentContainerStyle={styles.individualList}
+            nestedScrollEnabled
+            showsVerticalScrollIndicator
+            keyboardShouldPersistTaps="handled"
+          >
+            {props.individuals.map((individual, index) => (
+              <View key={`individual-${index}`} style={[styles.individualCard, { backgroundColor: c.bg, borderColor: c.border }]}>
+                <View style={styles.cardHeading}>
+                  <View style={[styles.equationBadge, { backgroundColor: c.surface, borderColor: c.border }]}>
+                    <Text style={[styles.badgeText, { color: c.muted }]}>{index + 1}</Text>
+                  </View>
+                  <View style={styles.cardTitleBlock}>
+                    <Text style={[styles.cardTitle, { color: c.text }]}>Individual {index + 1}</Text>
+                  </View>
+                </View>
+                <MeasurementField
+                  label={`Diameter at breast height (D) · individual ${index + 1} *`}
+                  value={individual.dbh}
+                  onChange={(value) => props.onIndividualChange(index, "dbh", value)}
+                  unit={individual.dbhUnit}
+                  onUnitChange={(value) => props.onIndividualChange(index, "dbhUnit", value)}
+                />
+                <MeasurementField
+                  label={`Tree height (H) · individual ${index + 1}`}
+                  value={individual.height}
+                  onChange={(value) => props.onIndividualChange(index, "height", value)}
+                  unit={individual.heightUnit}
+                  onUnitChange={(value) => props.onIndividualChange(index, "heightUnit", value)}
+                />
+                <Text style={[styles.noteText, { color: c.muted }]}>D is measured 1.3 m above ground.</Text>
+              </View>
+            ))}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ disabled: props.individuals.length >= MAX_INDIVIDUALS }}
+              disabled={props.individuals.length >= MAX_INDIVIDUALS}
+              onPress={props.onAddIndividual}
+              style={({ pressed }) => [
+                styles.addIndividual,
+                { borderColor: c.border, backgroundColor: c.surface, opacity: pressed ? 0.7 : 1 },
+              ]}
+            >
+              <Text style={[styles.actionText, { color: c.text }]}>+ Add Individual</Text>
+            </Pressable>
+          </ScrollView>
+        )}
+      </View>
+    </View>
+  );
 }
 
 type MeasureStepProps = {
-  species: string;
-  individuals: IndividualMeasurement[];
-  onIndividualChange: (index: number, field: keyof IndividualMeasurement, value: string) => void;
   equations: string[];
   setEquations: (equations: string[]) => void;
   onAddEquation: () => void;
@@ -409,7 +518,6 @@ function MeasureStep(props: MeasureStepProps) {
   const unusedFormula = FORMULAS.some((formula) => !selected.includes(formula.name));
   return (
     <View style={styles.stepContent}>
-      <Field label="Species"><View style={[styles.readOnlyField, { backgroundColor: c.surface, borderColor: c.border }]}><Text numberOfLines={1} style={[styles.dropdownText, { color: c.text }]}>{props.species}</Text></View></Field>
       <View style={styles.stepContent}>
         {selected.map((name, index) => {
           const formula = get_formula(name);
@@ -436,14 +544,6 @@ function MeasureStep(props: MeasureStepProps) {
         </Pressable>
 
       </View>
-      {props.individuals.map((individual, index) => (
-        <View key={`individual-${index}`} style={[styles.card, { backgroundColor: c.surface, borderColor: c.border }]}>
-          <View style={styles.cardHeading}><View style={[styles.equationBadge, { backgroundColor: c.bg, borderColor: c.border }]}><Text style={[styles.badgeText, { color: c.muted }]}>{index + 1}</Text></View><View style={styles.cardTitleBlock}><Text style={[styles.cardTitle, { color: c.text }]}>Individual {index + 1}</Text></View></View>
-          <MeasurementField label={`Diameter at breast height (D) · individual ${index + 1} *`} value={individual.dbh} onChange={(value) => props.onIndividualChange(index, "dbh", value)} unit={individual.dbhUnit} onUnitChange={(value) => props.onIndividualChange(index, "dbhUnit", value)} />
-          <MeasurementField label={`Tree height (H) · individual ${index + 1}`} value={individual.height} onChange={(value) => props.onIndividualChange(index, "height", value)} unit={individual.heightUnit} onUnitChange={(value) => props.onIndividualChange(index, "heightUnit", value)} />
-          <Text style={[styles.noteText, { color: c.muted }]}>D is measured 1.3 m above ground.</Text>
-        </View>
-      ))}
     </View>
   );
 }
@@ -530,6 +630,11 @@ const styles = StyleSheet.create({
   measurementField: { gap: 7 },
   inputRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
   numberInput: { flex: 1, height: 48, borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, fontSize: 16 },
+  individualScroll: { maxHeight: 420 },
+  individualList: { gap: 10, paddingBottom: 2 },
+  accordionHeader: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: 10 },
+  individualCard: { borderWidth: 1, borderRadius: 8, padding: 12, gap: 12 },
+  addIndividual: { minHeight: 48, borderWidth: 1, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   note: { borderWidth: 1, borderRadius: 8, padding: 12, gap: 6 },
   noteText: { fontSize: 13, lineHeight: 18 },
   dictionaryText: { fontSize: 13, fontWeight: "600" },
