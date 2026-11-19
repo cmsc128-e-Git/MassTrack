@@ -4,24 +4,42 @@ export type FormulaDefinition = {
   name: string;
   description: string;
   expression?: string;
+  inputs: string;
+  output: string;
+  dependsOn: string;
+  source: string;
   calculate: Formula;
 };
 
 const formulaDefinitions: Record<string, FormulaDefinition> = {
   add: {
     name: "add",
-    description: "Adds all supplied values.",
+    description: "Calculates total basal area across the measured individuals.",
+    expression: "TBA = Σᵢ₌₁ⁿ BAᵢ",
+    inputs: "BAᵢ — basal area per individual (cm²)",
+    output: "TBA — total basal area (cm²)",
+    dependsOn: "The basal area of every measured individual.",
+    source: "Wolfram Language, Total: https://reference.wolfram.com/language/ref/Total.html",
     calculate: add,
   },
   average: {
     name: "average",
-    description: "Calculates the arithmetic mean of the supplied values.",
+    description: "Calculates the arithmetic mean basal area across the measured individuals.",
+    expression: "BĀ = (Σᵢ BAᵢ) / n",
+    inputs: "BAᵢ — basal area per individual (cm²); n — number of individuals",
+    output: "BĀ — average basal area (cm²)",
+    dependsOn: "The basal area of every measured individual and their count.",
+    source: "Wolfram MathWorld, Arithmetic Mean: https://mathworld.wolfram.com/ArithmeticMean.html",
     calculate: average,
   },
   basal_area: {
     name: "basal_area",
     description: "Calculates basal area from diameter in centimetres.",
     expression: "BA = π × (D/2)²",
+    inputs: "D — diameter at breast height (cm)",
+    output: "BA — basal area per individual (cm²)",
+    dependsOn: "That individual's DBH, converted to centimetres before calculation.",
+    source: "Wolfram MathWorld, Circle (A = πr²): https://mathworld.wolfram.com/Circle.html",
     calculate: basalArea,
   },
 };
