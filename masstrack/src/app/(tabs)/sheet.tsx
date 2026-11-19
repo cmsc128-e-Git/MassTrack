@@ -7,9 +7,9 @@ import { parseMeasure } from "@/projects/measurements";
 import type { Entry, ProjectDocument } from "@/projects/model";
 import { calculateSheetSummaries, entryResults } from "@/projects/recompute";
 import { loadActiveProjectId, loadProject, setActiveProjectId, updateEntryMeasurements } from "@/projects/storage";
+import { sortRows, type Cell, type Direction } from "@/sortRows";
 import { useColors } from "@/theme";
 
-type Cell = string | number | null;
 type Column = { label: string; width?: number; value: (entry: Entry, index: number) => Cell; formula?: string };
 
 // Equations that summarize a whole column; shown as footer rows when the project uses them.
@@ -21,8 +21,9 @@ const SUMMARIES = [
 const MEASURED_COLUMNS: Column[] = [
   { label: "#", width: 44, value: (_, index) => index + 1 },
   { label: "Species", value: (entry) => entry.species },
-  { label: "DBH (cm)", width: 84, value: (entry) => entry.dbh_cm },
-  { label: "H (m)", width: 72, value: (entry) => entry.height_m },
+  // Widths leave room for the sort arrow so headers stay on one line.
+  { label: "DBH (cm)", width: 96, value: (entry) => entry.dbh_cm },
+  { label: "H (m)", width: 80, value: (entry) => entry.height_m },
 ];
 
 // One column per formula any row has a result for, labelled from the formula registry.
@@ -50,6 +51,7 @@ export default function Sheet() {
   const router = useRouter();
   const { projectId } = useLocalSearchParams<{ projectId?: string }>();
   const [document, setDocument] = useState<ProjectDocument | null>(null);
+  const [sort, setSort] = useState<{ label: string; direction: Direction } | null>(null);
   const [edit, setEdit] = useState<{ id: string; row: number; dbh: string; height: string } | null>(null);
   const [feedback, setFeedback] = useState("");
   const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
@@ -87,6 +89,14 @@ export default function Sheet() {
   const summaryValues = project.data_block.sheet_summaries ??
     calculateSheetSummaries(project.data_block.organisms.equations, entries);
   const addEntry = () => router.push({ pathname: "/input", params: { projectId: project.project_id } });
+
+  // Each row keeps its original index, so "#" stays the entry number and sorting by "#" restores entry order.
+  const sortColumn = columns.find((column) => column.label === sort?.label);
+  const indexed = entries.map((entry, index) => ({ entry, index }));
+  const rows = sort && sortColumn ? sortRows(indexed, ({ entry, index }) => sortColumn.value(entry, index), sort.direction) : indexed;
+  // First tap sorts ascending; tapping the same header again flips the direction.
+  const toggleSort = (label: string) =>
+    setSort(sort?.label === label && sort.direction === "asc" ? { label, direction: "desc" } : { label, direction: "asc" });
 
   function saveMeasurements() {
     if (!edit) return;
@@ -144,14 +154,23 @@ export default function Sheet() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tableScroll} contentContainerStyle={styles.tableContent}>
           <View style={[styles.table, { borderColor: c.border }]}>
             <View role="row" style={[styles.row, { backgroundColor: c.bg, borderColor: c.border }]}>
-              {columns.map((column, i) => (
-                <Text key={column.label} role="columnheader" style={[cellStyle(column, i), styles.header, { color: c.text }]}>
-                  {column.label}
-                </Text>
-              ))}
+              {columns.map((column, i) => {
+                const direction = sort?.label === column.label ? sort.direction : null;
+                return (
+                  <Text
+                    key={column.label}
+                    role="columnheader"
+                    onPress={() => toggleSort(column.label)}
+                    aria-label={`${column.label}${direction ? `, sorted ${direction === "asc" ? "ascending" : "descending"}` : ""}. Tap to sort.`}
+                    style={[cellStyle(column, i), styles.header, { color: direction ? c.accent : c.text }]}
+                  >
+                    {column.label}{direction === "asc" ? " ↑" : direction === "desc" ? " ↓" : ""}
+                  </Text>
+                );
+              })}
               <Text role="columnheader" style={[styles.editCell, styles.header, { color: c.text }]}>Actions</Text>
             </View>
-            {entries.map((entry, index) => (
+            {rows.map(({ entry, index }) => (
               <View
                 key={entry.entry_id}
                 role="row"
