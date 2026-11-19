@@ -33,6 +33,7 @@ export type DataBlock = {
   organisms: Organisms;
   entries: Entry[];
   calculations?: Calculation[];
+  sheet_summaries?: Record<string, Record<string, number>>;
 };
 
 export type Project = {

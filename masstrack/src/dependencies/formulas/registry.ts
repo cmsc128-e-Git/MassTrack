@@ -1,11 +1,18 @@
 import { add, average, basalArea, type Formula } from "./formulas_actual";
 
+export type MeasuredField = "dbh_cm" | "height_m";
+export type FormulaInputs =
+  | { scope: "entry"; fields: MeasuredField[] }
+  | { scope: "calculation"; formula: string };
+
 export type FormulaDefinition = {
   name: string;
   description: string;
   expression?: string;
   symbol?: string;
   unit?: string;
+  // Machine-readable dependencies and the Dictionary's display label have separate fields.
+  inputs: FormulaInputs;
   inputsLabel: string;
   output: string;
   dependsOn: string;
@@ -25,6 +32,7 @@ const formulaDefinitions: Record<string, FormulaDefinition> = {
     dependsOn: "The basal area of every measured individual.",
     source: "Wolfram Language, Total: https://reference.wolfram.com/language/ref/Total.html",
     calculate: add,
+    inputs: { scope: "calculation", formula: "basal_area" },
   },
   average: {
     name: "average",
@@ -37,6 +45,7 @@ const formulaDefinitions: Record<string, FormulaDefinition> = {
     dependsOn: "The basal area of every measured individual and their count.",
     source: "Wolfram MathWorld, Arithmetic Mean: https://mathworld.wolfram.com/ArithmeticMean.html",
     calculate: average,
+    inputs: { scope: "calculation", formula: "basal_area" },
   },
   basal_area: {
     name: "basal_area",
@@ -49,6 +58,7 @@ const formulaDefinitions: Record<string, FormulaDefinition> = {
     dependsOn: "That individual's DBH, converted to centimetres before calculation.",
     source: "Wolfram MathWorld, Circle (A = πr²): https://mathworld.wolfram.com/Circle.html",
     calculate: basalArea,
+    inputs: { scope: "entry", fields: ["dbh_cm"] },
   },
 };
 
