@@ -3,6 +3,7 @@ import { type ComponentRef, useCallback, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Button } from "@/components/Button";
 import { get_formula } from "@/dependencies/formulas/registry";
+import { parseMeasure } from "@/projects/measurements";
 import type { Entry, ProjectDocument } from "@/projects/model";
 import { calculateSheetSummaries, entryResults } from "@/projects/recompute";
 import { loadActiveProjectId, loadProject, setActiveProjectId, updateEntryMeasurements } from "@/projects/storage";
@@ -91,8 +92,8 @@ export default function Sheet() {
     if (!edit) return;
     try {
       const saved = updateEntryMeasurements(project.project_id, edit.id, {
-        dbh_cm: Number(edit.dbh),
-        height_m: edit.height.trim() === "" ? null : Number(edit.height),
+        dbh_cm: parseMeasure(edit.dbh),
+        height_m: edit.height.trim() === "" ? null : parseMeasure(edit.height),
       });
       if (!saved) throw new Error("This project is no longer available.");
       setDocument(saved);

@@ -9,23 +9,41 @@ export type FormulaDefinition = {
   name: string;
   description: string;
   expression?: string;
-  // Short column name and unit for per-individual results shown in the data sheet.
   symbol?: string;
   unit?: string;
+  // Machine-readable dependencies and the Dictionary's display label have separate fields.
   inputs: FormulaInputs;
+  inputsLabel: string;
+  output: string;
+  dependsOn: string;
+  source: string;
   calculate: Formula;
 };
 
 const formulaDefinitions: Record<string, FormulaDefinition> = {
   add: {
     name: "add",
-    description: "Adds all supplied values.",
+    description: "Calculates total basal area across the measured individuals.",
+    expression: "TBA = Σᵢ₌₁ⁿ BAᵢ",
+    symbol: "TBA",
+    unit: "cm²",
+    inputsLabel: "BAᵢ — basal area per individual (cm²)",
+    output: "TBA — total basal area (cm²)",
+    dependsOn: "The basal area of every measured individual.",
+    source: "Wolfram Language, Total: https://reference.wolfram.com/language/ref/Total.html",
     calculate: add,
     inputs: { scope: "calculation", formula: "basal_area" },
   },
   average: {
     name: "average",
-    description: "Calculates the arithmetic mean of the supplied values.",
+    description: "Calculates the arithmetic mean basal area across the measured individuals.",
+    expression: "BĀ = (Σᵢ BAᵢ) / n",
+    symbol: "BĀ",
+    unit: "cm²",
+    inputsLabel: "BAᵢ — basal area per individual (cm²); n — number of individuals",
+    output: "BĀ — average basal area (cm²)",
+    dependsOn: "The basal area of every measured individual and their count.",
+    source: "Wolfram MathWorld, Arithmetic Mean: https://mathworld.wolfram.com/ArithmeticMean.html",
     calculate: average,
     inputs: { scope: "calculation", formula: "basal_area" },
   },
@@ -35,6 +53,10 @@ const formulaDefinitions: Record<string, FormulaDefinition> = {
     expression: "BA = π × (D/2)²",
     symbol: "BA",
     unit: "cm²",
+    inputsLabel: "D — diameter at breast height (cm)",
+    output: "BA — basal area per individual (cm²)",
+    dependsOn: "That individual's DBH, converted to centimetres before calculation.",
+    source: "Wolfram MathWorld, Circle (A = πr²): https://mathworld.wolfram.com/Circle.html",
     calculate: basalArea,
     inputs: { scope: "entry", fields: ["dbh_cm"] },
   },

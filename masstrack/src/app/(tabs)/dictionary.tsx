@@ -16,7 +16,7 @@ import { find_formula, get_formula } from "@/dependencies/formulas/registry";
 const icon = (ios: string, android: string) =>
   ({ ios, android, web: android }) as SymbolViewProps["name"];
 
-type DictionaryTab = "Symbols" | "Formulas" | "Data types";
+type DictionaryTab = "Symbols" | "Formulas";
 
 type DictionaryEntry = {
   id: string;
@@ -28,6 +28,10 @@ type DictionaryEntry = {
   expression?: string;
   formulaName?: string;
   usedIn?: string;
+  inputsLabel?: string;
+  output?: string;
+  dependsOn?: string;
+  source?: string;
 };
 
 const SYMBOLS: DictionaryEntry[] = [
@@ -45,27 +49,25 @@ const SYMBOLS: DictionaryEntry[] = [
     symbol: "H",
     name: "Total tree height",
     unit: "m",
-    description: "The total vertical height of a tree.",
+    description: "Optional measurement captured for an individual; current formulas do not use height.",
     kind: "Symbols",
-    usedIn: "Step 4 · Compute",
   },
   {
     id: "rho",
     symbol: "ρ",
     name: "Wood density",
     unit: "g/cm³",
-    description: "The density of the wood used in biomass calculations.",
+    description: "Wood density is not used by the formulas currently implemented in MassTrack.",
     kind: "Symbols",
-    usedIn: "Step 4 · Compute",
   },
   {
     id: "BA",
     symbol: "BA",
     name: "Basal area",
-    unit: "m²",
+    unit: "cm²",
     description: "The cross-sectional area of a tree trunk at breast height.",
     kind: "Symbols",
-    expression: "BA = π × (D / 200)²",
+    expression: "BA = π × (D / 2)²",
     usedIn: "Step 4 · Compute",
   },
   {
@@ -73,58 +75,12 @@ const SYMBOLS: DictionaryEntry[] = [
     symbol: "AGB",
     name: "Above-ground biomass",
     unit: "kg · calculated output",
-    description:
-      "Dry mass of the living plant material above the soil, per tree or per area.",
+    description: "Above-ground biomass is not currently calculated by MassTrack.",
     kind: "Symbols",
-    expression: "AGB = f(ρ, D, H)",
-    usedIn: "Step 4 · Compute",
   },
 ];
 
-const DATA_TYPES: DictionaryEntry[] = [
-  {
-    id: "number",
-    symbol: "123",
-    name: "Number",
-    unit: "Numeric value",
-    description: "A value used in measurements and mathematical calculations.",
-    kind: "Data types",
-  },
-  {
-    id: "integer",
-    symbol: "42",
-    name: "Integer",
-    unit: "Whole number",
-    description: "A number without a fractional or decimal part.",
-    kind: "Data types",
-  },
-  {
-    id: "decimal",
-    symbol: "1.5",
-    name: "Decimal",
-    unit: "Number with a fractional part",
-    description: "A numeric value that can contain a decimal component.",
-    kind: "Data types",
-  },
-  {
-    id: "string",
-    symbol: "Aa",
-    name: "Text",
-    unit: "String",
-    description: "Text used for project names, species names, and labels.",
-    kind: "Data types",
-  },
-  {
-    id: "boolean",
-    symbol: "T/F",
-    name: "Boolean",
-    unit: "True or false",
-    description: "A value representing one of two states.",
-    kind: "Data types",
-  },
-];
-
-const TABS: DictionaryTab[] = ["Symbols", "Formulas", "Data types"];
+const TABS: DictionaryTab[] = ["Symbols", "Formulas"];
 
 export default function Dictionary() {
   const c = useColors();
@@ -154,7 +110,8 @@ export default function Dictionary() {
           const matchedNames = find_formula(q).map((item) => item.name);
           return (
             matchedNames.includes(formula.name) ||
-            formula.description.toLocaleLowerCase().includes(q)
+            [formula.description, formula.inputsLabel, formula.output, formula.dependsOn, formula.source]
+              .some((value) => value.toLocaleLowerCase().includes(q))
           );
         })
         .map((formula) => ({
@@ -166,12 +123,14 @@ export default function Dictionary() {
           kind: "Formulas" as DictionaryTab,
           expression: formula.expression ?? `${formula.name}(...values)`,
           formulaName: formula.name,
+          inputsLabel: formula.inputsLabel,
+          output: formula.output,
+          dependsOn: formula.dependsOn,
+          source: formula.source,
         }));
     }
 
-    const entries = activeTab === "Symbols" ? SYMBOLS : DATA_TYPES;
-
-    return entries.filter((entry) => {
+    return SYMBOLS.filter((entry) => {
       if (!q) return true;
 
       return [
@@ -180,6 +139,10 @@ export default function Dictionary() {
         entry.unit,
         entry.description,
         entry.expression ?? "",
+        entry.inputsLabel ?? "",
+        entry.output ?? "",
+        entry.dependsOn ?? "",
+        entry.source ?? "",
       ].some((value) => value.toLocaleLowerCase().includes(q));
     });
   }, [activeTab, formulas, query]);
@@ -236,9 +199,9 @@ export default function Dictionary() {
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="Search symbol, formula or data type"
+          placeholder="Search symbol or formula"
           placeholderTextColor={c.muted}
-          accessibilityLabel="Search symbol, formula or data type"
+          accessibilityLabel="Search symbol or formula"
           returnKeyType="search"
           autoCorrect={false}
           style={[styles.searchInput, { color: c.text }]}
@@ -295,6 +258,15 @@ export default function Dictionary() {
       <Text style={[styles.resultCount, { color: c.muted }]}>
         {results.length} {results.length === 1 ? "entry" : "entries"}
       </Text>
+
+      {activeTab === "Formulas" && (
+        <View style={[styles.formulaFlow, { backgroundColor: c.surface, borderColor: c.border }]}>
+          <Text style={[styles.flowTitle, { color: c.text }]}>Calculation order</Text>
+          <Text style={[styles.description, { color: c.muted }]}>
+            Convert each DBH to centimetres → calculate that individual’s basal area → optionally total or average all basal areas. Editing a DBH recalculates its basal area and the dependent summaries. Height is recorded but is not used by these formulas.
+          </Text>
+        </View>
+      )}
 
       <View style={styles.entries}>
         {results.map((entry) => {
@@ -372,6 +344,27 @@ export default function Dictionary() {
                         style={[styles.expressionText, { color: c.text }]}
                       >
                         {entry.expression}
+                      </Text>
+                    </View>
+                  )}
+
+                  {entry.inputsLabel && (
+                    <View style={styles.formulaDetails}>
+                      <Text style={[styles.description, { color: c.muted }]}>
+                        <Text style={[styles.detailLabel, { color: c.text }]}>Inputs: </Text>
+                        {entry.inputsLabel}
+                      </Text>
+                      <Text style={[styles.description, { color: c.muted }]}>
+                        <Text style={[styles.detailLabel, { color: c.text }]}>Output: </Text>
+                        {entry.output}
+                      </Text>
+                      <Text style={[styles.description, { color: c.muted }]}>
+                        <Text style={[styles.detailLabel, { color: c.text }]}>Depends on: </Text>
+                        {entry.dependsOn}
+                      </Text>
+                      <Text style={[styles.description, { color: c.muted }]}>
+                        <Text style={[styles.detailLabel, { color: c.text }]}>Source: </Text>
+                        {entry.source}
                       </Text>
                     </View>
                   )}
@@ -526,6 +519,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   resultCount: { fontSize: 13 },
+  formulaFlow: { borderWidth: 1, borderRadius: 8, padding: 14, gap: 6 },
+  flowTitle: { fontSize: 15, fontWeight: "700" },
   entries: {
     gap: 8,
   },
@@ -565,6 +560,8 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     gap: 10,
   },
+  formulaDetails: { gap: 6 },
+  detailLabel: { fontWeight: "600" },
   description: {
     fontSize: 14,
     lineHeight: 21,
