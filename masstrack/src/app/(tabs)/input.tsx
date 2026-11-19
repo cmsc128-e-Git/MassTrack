@@ -2,7 +2,8 @@ import { useLocalSearchParams } from "expo-router";
 import { SymbolView, type SymbolViewProps } from "expo-symbols";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { calculate_formula, get_formula } from "@/dependencies/formulas/registry";
+import { calculateEntryResults, calculateGroupResults } from "@/dependencies/formulas/recompute";
+import { get_formula } from "@/dependencies/formulas/registry";
 import { find_species } from "@/dependencies/species/species";
 import { loadInputDraft, saveInputDraft, type InputDraft } from "@/projects/inputDraft";
 import { createUuid, type Calculation, type Entry } from "@/projects/model";
@@ -160,10 +161,11 @@ function GuidedInput({ activeProjectId }: { activeProjectId: string | null }) {
   const visibleIndividuals = Number.isInteger(requestedCount) && requestedCount > 0 && requestedCount <= MAX_INDIVIDUALS
     ? Array.from({ length: requestedCount }, (_, index) => individuals[index] ?? emptyIndividual())
     : individuals;
-  const basalAreas = useMemo(() => visibleIndividuals.map(calculateIndividualBasalArea), [visibleIndividuals]);
+  const rowResults = useMemo(() => visibleIndividuals.map(calculateIndividualResults), [visibleIndividuals]);
+  const basalAreas = rowResults.map((results) => results.basal_area ?? null);
   const equationResults = useMemo(
-    () => calculateEquationResults(equations, basalAreas),
-    [equations, basalAreas],
+    () => calculateGroupResults(equations, rowResults),
+    [equations, rowResults],
   );
 
   if (!project) {
@@ -253,14 +255,12 @@ function GuidedInput({ activeProjectId }: { activeProjectId: string | null }) {
       return;
     }
     const timestamp = new Date().toISOString();
-    const entries: Entry[] = visibleIndividuals.map((individual, index) => {
-      const basalArea = basalAreas[index]!;
+    const entries: Entry[] = visibleIndividuals.map((individual) => {
       return {
         entry_id: createUuid(),
         species,
         dbh_cm: toCentimetres(individual.dbh, individual.dbhUnit),
         height_m: individual.height.trim() ? toMetres(individual.height, individual.heightUnit) : null,
-        results: { basal_area: basalArea },
         date_created: timestamp,
       };
     });
@@ -269,17 +269,23 @@ function GuidedInput({ activeProjectId }: { activeProjectId: string | null }) {
       species,
       entry_ids: entries.map((entry) => entry.entry_id),
       equations,
-      results: equationResults,
+      results: {},
       date_created: timestamp,
     };
-    updateProject(activeProjectId, (current) => ({
-      ...current,
-      data_block: {
-        ...current.data_block,
-        entries: [...current.data_block.entries, ...entries],
-        calculations: [...(current.data_block.calculations ?? []), calculation],
-      },
-    }));
+    try {
+      const saved = updateProject(activeProjectId, (current) => ({
+        ...current,
+        data_block: {
+          ...current.data_block,
+          entries: [...current.data_block.entries, ...entries],
+          calculations: [...(current.data_block.calculations ?? []), calculation],
+        },
+      }));
+      if (!saved) throw new Error("This project is no longer available.");
+    } catch (error) {
+      Alert.alert("Unable to save calculation", error instanceof Error ? error.message : "Please try again.");
+      return;
+    }
     const emptyMeasurements = Array.from({ length: visibleIndividuals.length }, emptyIndividual);
     saveInputDraft(activeProjectId, buildDraft(emptyMeasurements));
     setIndividuals(emptyMeasurements);
@@ -561,18 +567,10 @@ function emptyIndividual(): IndividualMeasurement {
   return { dbh: "", height: "", dbhUnit: UNITS[0], heightUnit: UNITS[1] };
 }
 
-function calculateIndividualBasalArea(individual: IndividualMeasurement): number | null {
-  if (!isPositiveNumber(individual.dbh)) return null;
-  const result = calculate_formula("basal_area", toCentimetres(individual.dbh, individual.dbhUnit));
-  return result !== undefined && Number.isFinite(result) ? result : null;
-}
-
-function calculateEquationResults(equations: string[], basalAreas: (number | null)[]): Record<string, number[]> {
-  if (basalAreas.some((area) => area === null)) return {};
-  const values = basalAreas.filter((area): area is number => area !== null);
-  return Object.fromEntries(equations.flatMap((name) => {
-    if (name === "basal_area") return [[name, values]];
-    const result = calculate_formula(name, ...values);
-    return result === undefined || !Number.isFinite(result) ? [] : [[name, [result]]];
-  }));
+function calculateIndividualResults(individual: IndividualMeasurement): Record<string, number> {
+  if (!isPositiveNumber(individual.dbh)) return {};
+  return calculateEntryResults({
+    dbh_cm: toCentimetres(individual.dbh, individual.dbhUnit),
+    height_m: individual.height.trim() ? toMetres(individual.height, individual.heightUnit) : null,
+  });
 }

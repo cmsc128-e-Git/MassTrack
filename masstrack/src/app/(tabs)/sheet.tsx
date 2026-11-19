@@ -1,10 +1,11 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { type ComponentRef, useCallback, useRef, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Button } from "@/components/Button";
-import { calculate_formula, get_formula } from "@/dependencies/formulas/registry";
+import { get_formula } from "@/dependencies/formulas/registry";
 import type { Entry, ProjectDocument } from "@/projects/model";
-import { loadActiveProjectId, loadProject, setActiveProjectId } from "@/projects/storage";
+import { calculateSheetSummaries, entryResults } from "@/projects/recompute";
+import { loadActiveProjectId, loadProject, setActiveProjectId, updateEntryMeasurements } from "@/projects/storage";
 import { useColors } from "@/theme";
 
 type Cell = string | number | null;
@@ -23,17 +24,13 @@ const MEASURED_COLUMNS: Column[] = [
   { label: "H (m)", width: 72, value: (entry) => entry.height_m },
 ];
 
-// Rows saved before results existed only have basal_area_cm2.
-const resultsOf = (entry: Entry): Record<string, number> =>
-  entry.results ?? (entry.basal_area_cm2 === undefined ? {} : { basal_area: entry.basal_area_cm2 });
-
 // One column per formula any row has a result for, labelled from the formula registry.
 function resultColumns(entries: Entry[]): Column[] {
-  const names = new Set(entries.flatMap((entry) => Object.keys(resultsOf(entry))));
+  const names = new Set(entries.flatMap((entry) => Object.keys(entryResults(entry))));
   return [...names].map((name) => {
     const formula = get_formula(name);
     const label = formula?.symbol ? `${formula.symbol}${formula.unit ? ` (${formula.unit})` : ""}*` : name;
-    return { label, width: 96, formula: name, value: (entry) => resultsOf(entry)[name] ?? null };
+    return { label, width: 96, formula: name, value: (entry) => entryResults(entry)[name] ?? null };
   });
 }
 
@@ -52,6 +49,9 @@ export default function Sheet() {
   const router = useRouter();
   const { projectId } = useLocalSearchParams<{ projectId?: string }>();
   const [document, setDocument] = useState<ProjectDocument | null>(null);
+  const [edit, setEdit] = useState<{ id: string; row: number; dbh: string; height: string } | null>(null);
+  const [feedback, setFeedback] = useState("");
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
 
   // Tabs stay mounted, so reload every time the Sheet tab comes into view to show newly saved rows.
   useFocusEffect(
@@ -59,6 +59,8 @@ export default function Sheet() {
       const next = pickProject(projectId);
       if (next) setActiveProjectId(next.project.project_id);
       setDocument(next);
+      setEdit(null);
+      setFeedback("");
     }, [projectId]),
   );
 
@@ -81,7 +83,25 @@ export default function Sheet() {
   const results = resultColumns(entries);
   const columns = [...MEASURED_COLUMNS, ...results];
   const summaries = SUMMARIES.filter(({ name }) => project.data_block.organisms.equations.includes(name));
+  const summaryValues = project.data_block.sheet_summaries ??
+    calculateSheetSummaries(project.data_block.organisms.equations, entries);
   const addEntry = () => router.push({ pathname: "/input", params: { projectId: project.project_id } });
+
+  function saveMeasurements() {
+    if (!edit) return;
+    try {
+      const saved = updateEntryMeasurements(project.project_id, edit.id, {
+        dbh_cm: Number(edit.dbh),
+        height_m: edit.height.trim() === "" ? null : Number(edit.height),
+      });
+      if (!saved) throw new Error("This project is no longer available.");
+      setDocument(saved);
+      setEdit(null);
+      setFeedback("Measurements and results saved.");
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Unable to save measurements.");
+    }
+  }
 
   // Species stretches to fill wide screens; every other column keeps a fixed width so rows line up.
   const cellStyle = (column: Column, i: number) => [
@@ -92,13 +112,30 @@ export default function Sheet() {
   ];
 
   return (
-    <ScrollView style={{ backgroundColor: c.bg }} contentContainerStyle={styles.content}>
+    <ScrollView ref={scrollRef} style={{ backgroundColor: c.bg }} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.heading}>
         <Text style={[styles.projectName, { color: c.text }]} numberOfLines={1}>{project.name}</Text>
         <Text style={[styles.note, { color: c.muted }]}>
           {entries.length} {entries.length === 1 ? "entry" : "entries"} · saved on this device
         </Text>
       </View>
+
+      {edit && (
+        <View style={styles.editor}>
+          <Text style={[styles.projectName, { color: c.text }]}>Edit row {edit.row}</Text>
+          <Text style={{ color: c.text }}>DBH (cm)</Text>
+          <TextInput accessibilityLabel="DBH in centimetres" keyboardType="decimal-pad" value={edit.dbh}
+            onChangeText={(dbh) => setEdit({ ...edit, dbh })}
+            style={[styles.editInput, { color: c.text, borderColor: c.border }]} />
+          <Text style={{ color: c.text }}>Height (m, optional)</Text>
+          <TextInput accessibilityLabel="Optional height in metres" keyboardType="decimal-pad" value={edit.height}
+            onChangeText={(height) => setEdit({ ...edit, height })}
+            style={[styles.editInput, { color: c.text, borderColor: c.border }]} />
+          <Button title="Save measurements" onPress={saveMeasurements} />
+          <Button title="Cancel" onPress={() => { setEdit(null); setFeedback(""); }} />
+        </View>
+      )}
+      {feedback !== "" && <Text accessibilityLiveRegion="polite" style={[styles.note, { color: c.text }]}>{feedback}</Text>}
 
       {entries.length === 0 ? (
         <Text style={[styles.note, { color: c.muted }]}>No entries yet. Measure an individual in Input to add the first row.</Text>
@@ -111,6 +148,7 @@ export default function Sheet() {
                   {column.label}
                 </Text>
               ))}
+              <Text role="columnheader" style={[styles.editCell, styles.header, { color: c.text }]}>Actions</Text>
             </View>
             {entries.map((entry, index) => (
               <View
@@ -124,19 +162,28 @@ export default function Sheet() {
                     {format(column.value(entry, index))}
                   </Text>
                 ))}
+                <Pressable accessibilityRole="button" accessibilityLabel={`Edit measurements for row ${index + 1}`}
+                  onPress={() => {
+                    setFeedback("");
+                    setEdit({ id: entry.entry_id, row: index + 1, dbh: String(entry.dbh_cm), height: entry.height_m?.toString() ?? "" });
+                    scrollRef.current?.scrollTo({ y: 0 });
+                  }}
+                  style={styles.editCell}>
+                  <Text style={{ color: c.accent }}>Edit</Text>
+                </Pressable>
               </View>
             ))}
             {summaries.map(({ name, label }) => (
               <View key={name} role="row" style={[styles.row, { backgroundColor: c.bg, borderColor: c.border }]}>
                 {columns.map((column, i) => {
-                  const values = column.formula ? entries.map((entry, index) => column.value(entry, index)).filter((v): v is number => typeof v === "number") : [];
-                  const cell = i === 1 ? label : column.formula ? calculate_formula(name, ...values) ?? null : "";
+                  const cell = i === 1 ? label : column.formula ? summaryValues[name]?.[column.formula] ?? null : "";
                   return (
                     <Text key={column.label} numberOfLines={1} style={[cellStyle(column, i), styles.header, { color: c.text }]}>
                       {format(cell)}
                     </Text>
                   );
                 })}
+                <View style={styles.editCell} />
               </View>
             ))}
           </View>
@@ -159,6 +206,9 @@ export default function Sheet() {
 const styles = StyleSheet.create({
   content: { flexGrow: 1, alignSelf: "center", width: "100%", maxWidth: 1120, padding: 20, gap: 16, paddingBottom: 32 },
   primaryAction: { width: "100%", maxWidth: 320, alignSelf: "center" },
+  editor: { gap: 8, width: "100%", maxWidth: 360 },
+  editInput: { minHeight: 48, borderWidth: 1, borderRadius: 8, paddingHorizontal: 12 },
+  editCell: { width: 80, minHeight: 48, alignItems: "center", justifyContent: "center", padding: 12 },
   heading: { gap: 2 },
   projectName: { fontSize: 22, fontWeight: "700" },
   // ScrollView grows to fill its parent by default; stop that so the table is only as tall as its rows.
