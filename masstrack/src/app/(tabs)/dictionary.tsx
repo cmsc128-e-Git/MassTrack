@@ -16,7 +16,7 @@ import { find_formula, get_formula } from "@/dependencies/formulas/registry";
 const icon = (ios: string, android: string) =>
   ({ ios, android, web: android }) as SymbolViewProps["name"];
 
-type DictionaryTab = "Symbols" | "Formulas" | "Data types";
+type DictionaryTab = "Symbols" | "Formulas";
 
 type DictionaryEntry = {
   id: string;
@@ -80,50 +80,7 @@ const SYMBOLS: DictionaryEntry[] = [
   },
 ];
 
-const DATA_TYPES: DictionaryEntry[] = [
-  {
-    id: "number",
-    symbol: "123",
-    name: "Number",
-    unit: "Numeric value",
-    description: "A value used in measurements and mathematical calculations.",
-    kind: "Data types",
-  },
-  {
-    id: "integer",
-    symbol: "42",
-    name: "Integer",
-    unit: "Whole number",
-    description: "A number without a fractional or decimal part.",
-    kind: "Data types",
-  },
-  {
-    id: "decimal",
-    symbol: "1.5",
-    name: "Decimal",
-    unit: "Number with a fractional part",
-    description: "A numeric value that can contain a decimal component.",
-    kind: "Data types",
-  },
-  {
-    id: "string",
-    symbol: "Aa",
-    name: "Text",
-    unit: "String",
-    description: "Text used for project names, species names, and labels.",
-    kind: "Data types",
-  },
-  {
-    id: "boolean",
-    symbol: "T/F",
-    name: "Boolean",
-    unit: "True or false",
-    description: "A value representing one of two states.",
-    kind: "Data types",
-  },
-];
-
-const TABS: DictionaryTab[] = ["Symbols", "Formulas", "Data types"];
+const TABS: DictionaryTab[] = ["Symbols", "Formulas"];
 
 export default function Dictionary() {
   const c = useColors();
@@ -173,9 +130,7 @@ export default function Dictionary() {
         }));
     }
 
-    const entries = activeTab === "Symbols" ? SYMBOLS : DATA_TYPES;
-
-    return entries.filter((entry) => {
+    return SYMBOLS.filter((entry) => {
       if (!q) return true;
 
       return [
@@ -244,9 +199,9 @@ export default function Dictionary() {
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="Search symbol, formula or data type"
+          placeholder="Search symbol or formula"
           placeholderTextColor={c.muted}
-          accessibilityLabel="Search symbol, formula or data type"
+          accessibilityLabel="Search symbol or formula"
           returnKeyType="search"
           autoCorrect={false}
           style={[styles.searchInput, { color: c.text }]}
