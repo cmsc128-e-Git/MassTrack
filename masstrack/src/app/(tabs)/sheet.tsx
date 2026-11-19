@@ -5,9 +5,9 @@ import { Button } from "@/components/Button";
 import { calculate_formula, get_formula } from "@/dependencies/formulas/registry";
 import type { Entry, ProjectDocument } from "@/projects/model";
 import { loadActiveProjectId, loadProject, setActiveProjectId } from "@/projects/storage";
+import { sortRows, type Cell, type Direction } from "@/sortRows";
 import { useColors } from "@/theme";
 
-type Cell = string | number | null;
 type Column = { label: string; width?: number; value: (entry: Entry, index: number) => Cell; formula?: string };
 
 // Equations that summarize a whole column; shown as footer rows when the project uses them.
@@ -19,8 +19,9 @@ const SUMMARIES = [
 const MEASURED_COLUMNS: Column[] = [
   { label: "#", width: 44, value: (_, index) => index + 1 },
   { label: "Species", value: (entry) => entry.species },
-  { label: "DBH (cm)", width: 84, value: (entry) => entry.dbh_cm },
-  { label: "H (m)", width: 72, value: (entry) => entry.height_m },
+  // Widths leave room for the sort arrow so headers stay on one line.
+  { label: "DBH (cm)", width: 96, value: (entry) => entry.dbh_cm },
+  { label: "H (m)", width: 80, value: (entry) => entry.height_m },
 ];
 
 // Rows saved before results existed only have basal_area_cm2.
@@ -52,6 +53,7 @@ export default function Sheet() {
   const router = useRouter();
   const { projectId } = useLocalSearchParams<{ projectId?: string }>();
   const [document, setDocument] = useState<ProjectDocument | null>(null);
+  const [sort, setSort] = useState<{ label: string; direction: Direction } | null>(null);
 
   // Tabs stay mounted, so reload every time the Sheet tab comes into view to show newly saved rows.
   useFocusEffect(
@@ -83,6 +85,14 @@ export default function Sheet() {
   const summaries = SUMMARIES.filter(({ name }) => project.data_block.organisms.equations.includes(name));
   const addEntry = () => router.push({ pathname: "/input", params: { projectId: project.project_id } });
 
+  // Each row keeps its original index, so "#" stays the entry number and sorting by "#" restores entry order.
+  const sortColumn = columns.find((column) => column.label === sort?.label);
+  const indexed = entries.map((entry, index) => ({ entry, index }));
+  const rows = sort && sortColumn ? sortRows(indexed, ({ entry, index }) => sortColumn.value(entry, index), sort.direction) : indexed;
+  // First tap sorts ascending; tapping the same header again flips the direction.
+  const toggleSort = (label: string) =>
+    setSort(sort?.label === label && sort.direction === "asc" ? { label, direction: "desc" } : { label, direction: "asc" });
+
   // Species stretches to fill wide screens; every other column keeps a fixed width so rows line up.
   const cellStyle = (column: Column, i: number) => [
     styles.cell,
@@ -106,13 +116,22 @@ export default function Sheet() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tableScroll} contentContainerStyle={styles.tableContent}>
           <View style={[styles.table, { borderColor: c.border }]}>
             <View role="row" style={[styles.row, { backgroundColor: c.bg, borderColor: c.border }]}>
-              {columns.map((column, i) => (
-                <Text key={column.label} role="columnheader" style={[cellStyle(column, i), styles.header, { color: c.text }]}>
-                  {column.label}
-                </Text>
-              ))}
+              {columns.map((column, i) => {
+                const direction = sort?.label === column.label ? sort.direction : null;
+                return (
+                  <Text
+                    key={column.label}
+                    role="columnheader"
+                    onPress={() => toggleSort(column.label)}
+                    aria-label={`${column.label}${direction ? `, sorted ${direction === "asc" ? "ascending" : "descending"}` : ""}. Tap to sort.`}
+                    style={[cellStyle(column, i), styles.header, { color: direction ? c.accent : c.text }]}
+                  >
+                    {column.label}{direction === "asc" ? " ↑" : direction === "desc" ? " ↓" : ""}
+                  </Text>
+                );
+              })}
             </View>
-            {entries.map((entry, index) => (
+            {rows.map(({ entry, index }) => (
               <View
                 key={entry.entry_id}
                 role="row"
