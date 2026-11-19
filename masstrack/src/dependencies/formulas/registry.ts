@@ -4,6 +4,9 @@ export type FormulaDefinition = {
   name: string;
   description: string;
   expression?: string;
+  // Short column name and unit for per-individual results shown in the data sheet.
+  symbol?: string;
+  unit?: string;
   calculate: Formula;
 };
 
@@ -22,6 +25,8 @@ const formulaDefinitions: Record<string, FormulaDefinition> = {
     name: "basal_area",
     description: "Calculates basal area from diameter in centimetres.",
     expression: "BA = π × (D/2)²",
+    symbol: "BA",
+    unit: "cm²",
     calculate: basalArea,
   },
 };
