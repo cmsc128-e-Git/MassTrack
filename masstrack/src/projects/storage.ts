@@ -141,7 +141,7 @@ function isEntry(value: unknown): value is Entry {
     typeof value.species === "string" &&
     typeof value.dbh_cm === "number" &&
     (typeof value.height_m === "number" || value.height_m === null) &&
-    typeof value.basal_area_cm2 === "number" &&
+    (value.basal_area_cm2 === undefined || typeof value.basal_area_cm2 === "number") &&
     typeof value.date_created === "string" &&
     (value.results === undefined || isNumberRecord(value.results))
   );
