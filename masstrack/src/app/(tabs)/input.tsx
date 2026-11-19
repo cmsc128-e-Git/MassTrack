@@ -264,15 +264,7 @@ function GuidedInput({ activeProjectId }: { activeProjectId: string | null }) {
         date_created: timestamp,
       };
     });
-    const entryKey = (entry: Entry) => `${entry.species}|${entry.dbh_cm}|${entry.height_m ?? ""}`;
-    const entries: Entry[] = preparedEntries.map((entry) =>
-      project.project.data_block.entries.find((existing) => entryKey(existing) === entryKey(entry)) ?? entry,
-    );
-    const existingKeys = new Set(project.project.data_block.entries.map(entryKey));
-    const newEntries = entries.filter((entry, index) =>
-      !existingKeys.has(entryKey(entry)) &&
-      entries.findIndex((candidate) => entryKey(candidate) === entryKey(entry)) === index,
-    );
+    const entries = preparedEntries;
     const calculation: Calculation = {
       calculation_id: createUuid(),
       species,
@@ -285,7 +277,7 @@ function GuidedInput({ activeProjectId }: { activeProjectId: string | null }) {
       ...current,
       data_block: {
         ...current.data_block,
-        entries: [...current.data_block.entries, ...newEntries],
+        entries: [...current.data_block.entries, ...entries],
         calculations: [...(current.data_block.calculations ?? []), calculation],
       },
     }));
