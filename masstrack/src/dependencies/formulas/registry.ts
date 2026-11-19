@@ -1,5 +1,10 @@
 import { add, average, basalArea, type Formula } from "./formulas_actual";
 
+export type MeasuredField = "dbh_cm" | "height_m";
+export type FormulaInputs =
+  | { scope: "entry"; fields: MeasuredField[] }
+  | { scope: "calculation"; formula: string };
+
 export type FormulaDefinition = {
   name: string;
   description: string;
@@ -7,6 +12,7 @@ export type FormulaDefinition = {
   // Short column name and unit for per-individual results shown in the data sheet.
   symbol?: string;
   unit?: string;
+  inputs: FormulaInputs;
   calculate: Formula;
 };
 
@@ -15,11 +21,13 @@ const formulaDefinitions: Record<string, FormulaDefinition> = {
     name: "add",
     description: "Adds all supplied values.",
     calculate: add,
+    inputs: { scope: "calculation", formula: "basal_area" },
   },
   average: {
     name: "average",
     description: "Calculates the arithmetic mean of the supplied values.",
     calculate: average,
+    inputs: { scope: "calculation", formula: "basal_area" },
   },
   basal_area: {
     name: "basal_area",
@@ -28,6 +36,7 @@ const formulaDefinitions: Record<string, FormulaDefinition> = {
     symbol: "BA",
     unit: "cm²",
     calculate: basalArea,
+    inputs: { scope: "entry", fields: ["dbh_cm"] },
   },
 };
 
