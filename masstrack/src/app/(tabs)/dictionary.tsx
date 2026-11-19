@@ -28,7 +28,7 @@ type DictionaryEntry = {
   expression?: string;
   formulaName?: string;
   usedIn?: string;
-  inputs?: string;
+  inputsLabel?: string;
   output?: string;
   dependsOn?: string;
   source?: string;
@@ -110,7 +110,7 @@ export default function Dictionary() {
           const matchedNames = find_formula(q).map((item) => item.name);
           return (
             matchedNames.includes(formula.name) ||
-            [formula.description, formula.inputs, formula.output, formula.dependsOn, formula.source]
+            [formula.description, formula.inputsLabel, formula.output, formula.dependsOn, formula.source]
               .some((value) => value.toLocaleLowerCase().includes(q))
           );
         })
@@ -123,7 +123,7 @@ export default function Dictionary() {
           kind: "Formulas" as DictionaryTab,
           expression: formula.expression ?? `${formula.name}(...values)`,
           formulaName: formula.name,
-          inputs: formula.inputs,
+          inputsLabel: formula.inputsLabel,
           output: formula.output,
           dependsOn: formula.dependsOn,
           source: formula.source,
@@ -139,7 +139,7 @@ export default function Dictionary() {
         entry.unit,
         entry.description,
         entry.expression ?? "",
-        entry.inputs ?? "",
+        entry.inputsLabel ?? "",
         entry.output ?? "",
         entry.dependsOn ?? "",
         entry.source ?? "",
@@ -348,11 +348,11 @@ export default function Dictionary() {
                     </View>
                   )}
 
-                  {entry.inputs && (
+                  {entry.inputsLabel && (
                     <View style={styles.formulaDetails}>
                       <Text style={[styles.description, { color: c.muted }]}>
                         <Text style={[styles.detailLabel, { color: c.text }]}>Inputs: </Text>
-                        {entry.inputs}
+                        {entry.inputsLabel}
                       </Text>
                       <Text style={[styles.description, { color: c.muted }]}>
                         <Text style={[styles.detailLabel, { color: c.text }]}>Output: </Text>
