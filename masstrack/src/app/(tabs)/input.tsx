@@ -284,7 +284,7 @@ function GuidedInput({ activeProjectId }: { activeProjectId: string | null }) {
     const emptyMeasurements = Array.from({ length: visibleIndividuals.length }, emptyIndividual);
     saveInputDraft(activeProjectId, buildDraft(emptyMeasurements));
     setIndividuals(emptyMeasurements);
-    setCurrentStep(2);
+    setCurrentStep(1);
     Alert.alert("Calculation saved", `${entries.length} ${entries.length === 1 ? "individual" : "individuals"} added to the data sheet.`);
   }
 
