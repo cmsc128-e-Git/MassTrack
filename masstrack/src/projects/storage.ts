@@ -1,5 +1,6 @@
 import { storage } from "@/storage";
 import { withUpdatedTimestamp, type Entry, type Project, type ProjectDocument } from "./model";
+import { recomputeDataBlock } from "./recompute";
 
 const PROJECT_INDEX_KEY = "masstrack.projects.index";
 const PROJECT_KEY_PREFIX = "masstrack.project.";
@@ -29,8 +30,11 @@ export function deleteProject(projectId: string): void {
 }
 
 export function saveProject(document: ProjectDocument): ProjectDocument {
-  const savedDocument = withUpdatedTimestamp(document);
-  const projectId = savedDocument.project.project_id;
+  const { project } = document;
+  const projectId = project.project_id;
+  const previous = loadProject(projectId);
+  const data_block = recomputeDataBlock(project.data_block, previous?.project.data_block);
+  const savedDocument = withUpdatedTimestamp({ project: { ...project, data_block } });
   const projectIds = readProjectIds();
 
   storage.setItemSync(projectKey(projectId), JSON.stringify(savedDocument));
@@ -64,6 +68,32 @@ export function renameProject(projectId: string, name: string): ProjectDocument 
 export function updateProject(projectId: string, change: (project: Project) => Project): ProjectDocument | null {
   const document = loadProject(projectId);
   return document && saveProject({ project: change(document.project) });
+}
+
+export function updateEntryMeasurements(
+  projectId: string,
+  entryId: string,
+  measurements: Pick<Entry, "dbh_cm" | "height_m">,
+): ProjectDocument | null {
+  const { dbh_cm, height_m } = measurements;
+  if (!Number.isFinite(dbh_cm) || dbh_cm <= 0 ||
+      (height_m !== null && (!Number.isFinite(height_m) || height_m <= 0))) {
+    throw new Error("Enter a positive diameter and leave height blank or enter a positive height.");
+  }
+  return updateProject(projectId, (project) => {
+    if (!project.data_block.entries.some((entry) => entry.entry_id === entryId)) {
+      throw new Error("This entry is no longer in the project.");
+    }
+    return {
+      ...project,
+      data_block: {
+        ...project.data_block,
+        entries: project.data_block.entries.map((entry) =>
+          entry.entry_id === entryId ? { ...entry, ...measurements } : entry,
+        ),
+      },
+    };
+  });
 }
 
 export function loadProject(projectId: string): ProjectDocument | null {
@@ -130,7 +160,9 @@ function isProjectDocument(value: unknown): value is ProjectDocument {
     Array.isArray(organisms.equations) &&
     organisms.equations.every((equation: unknown) => typeof equation === "string") &&
     (dataBlock.entries === undefined || (Array.isArray(dataBlock.entries) && dataBlock.entries.every(isEntry))) &&
-    (dataBlock.calculations === undefined || (Array.isArray(dataBlock.calculations) && dataBlock.calculations.every(isCalculation)))
+    (dataBlock.calculations === undefined || (Array.isArray(dataBlock.calculations) && dataBlock.calculations.every(isCalculation))) &&
+    (dataBlock.sheet_summaries === undefined ||
+      (isRecord(dataBlock.sheet_summaries) && Object.values(dataBlock.sheet_summaries).every(isNumberRecord)))
   );
 }
 
