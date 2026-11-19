@@ -1,7 +1,7 @@
 import { useLocalSearchParams } from "expo-router";
 import { SymbolView, type SymbolViewProps } from "expo-symbols";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputInstance } from "react-native";
 import { calculate_formula, get_formula } from "@/dependencies/formulas/registry";
 import { find_species } from "@/dependencies/species/species";
 import { loadInputDraft, saveInputDraft, type InputDraft } from "@/projects/inputDraft";
@@ -127,6 +127,7 @@ export default function Input() {
 
 function GuidedInput({ activeProjectId }: { activeProjectId: string | null }) {
   const c = useColors();
+  const projectNameInput = useRef<TextInputInstance>(null);
   const project = useMemo(() => (activeProjectId ? loadProject(activeProjectId) : null), [activeProjectId]);
   const initialDraft = useMemo(() => (activeProjectId ? loadInputDraft(activeProjectId) : null), [activeProjectId]);
   const initialDiameter = initialDraft?.measurements.find((entry) => entry.label === "Diameter at breast height");
@@ -351,6 +352,7 @@ function GuidedInput({ activeProjectId }: { activeProjectId: string | null }) {
         {/* Rename right after creating a project, without going back to Projects. */}
         <View style={[styles.projectContext, { borderColor: c.border }]}>
           <TextInput
+            ref={projectNameInput}
             accessibilityLabel="Project name"
             value={projectName}
             onChangeText={setProjectName}
@@ -361,7 +363,14 @@ function GuidedInput({ activeProjectId }: { activeProjectId: string | null }) {
             placeholderTextColor={c.inactive}
             style={[styles.projectName, { color: c.text }]}
           />
-          <SymbolView name={icon("pencil", "edit")} tintColor={c.muted} size={18} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Edit project name"
+            onPress={() => projectNameInput.current?.focus()}
+            style={styles.renameProjectButton}
+          >
+            <SymbolView name={icon("pencil", "edit")} tintColor={c.muted} size={18} />
+          </Pressable>
         </View>
 
         <View style={styles.steps} accessibilityLabel={`Step ${currentStep + 1} of ${STEPS.length}: ${STEP_TITLES[currentStep]}`}>
@@ -539,8 +548,8 @@ function MeasureStep(props: MeasureStepProps) {
             </View>
           );
         })}
-        <Pressable accessibilityRole="button" accessibilityState={{ disabled: !unusedFormula }} disabled={!unusedFormula} onPress={props.onAddEquation} style={({ pressed }) => [styles.addEquation, { borderColor: c.border, backgroundColor: c.surface, opacity: unusedFormula ? (pressed ? 0.7 : 1) : 0.5 }]}>
-          <Text style={[styles.actionText, { color: c.text }]}>+ Add Equation</Text>
+        <Pressable accessibilityRole="button" accessibilityState={{ disabled: !unusedFormula }} disabled={!unusedFormula} onPress={props.onAddEquation} style={({ pressed }) => [styles.addEquation, { borderColor: unusedFormula ? c.accent : c.border, backgroundColor: unusedFormula ? c.accent : c.surface, opacity: unusedFormula ? (pressed ? 0.8 : 1) : 0.5 }]}>
+          <Text style={[styles.actionText, { color: unusedFormula ? c.onAccent : c.inactive }]}>+ Add Equation</Text>
         </Pressable>
 
       </View>
@@ -591,6 +600,7 @@ const styles = StyleSheet.create({
   content: { flexGrow: 1, alignSelf: "center", width: "100%", maxWidth: 920, padding: 20, paddingBottom: 32, gap: 18 },
   projectContext: { flexDirection: "row", alignItems: "center", gap: 8, borderBottomWidth: 1 },
   projectName: { flex: 1, minHeight: 48, fontSize: 18, fontWeight: "600" },
+  renameProjectButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   emptyInput: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
   emptyInputText: { fontSize: 16, textAlign: "center" },
   steps: { flexDirection: "row", gap: 6 },
