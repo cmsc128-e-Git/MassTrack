@@ -168,13 +168,22 @@ export default function Sheet() {
                   </Text>
                 );
               })}
-              <Text role="columnheader" style={[styles.editCell, styles.header, { color: c.text }]}>Actions</Text>
             </View>
             {rows.map(({ entry, index }) => (
-              <View
+              <Pressable
                 key={entry.entry_id}
-                role="row"
-                aria-label={columns.map((column) => `${column.label} ${format(column.value(entry, index))}`).join(", ")}
+                role="button"
+                accessibilityLabel={`Edit row ${index + 1}`}
+                onPress={() => {
+                  setFeedback("");
+                  setEdit({
+                    id: entry.entry_id,
+                    row: index + 1,
+                    dbh: String(entry.dbh_cm),
+                    height: entry.height_m?.toString() ?? "",
+                  });
+                  scrollRef.current?.scrollTo({ y: 0 });
+                }}
                 style={[styles.row, { backgroundColor: c.surface, borderColor: c.border }]}
               >
                 {columns.map((column, i) => (
@@ -182,16 +191,8 @@ export default function Sheet() {
                     {format(column.value(entry, index))}
                   </Text>
                 ))}
-                <Pressable accessibilityRole="button" accessibilityLabel={`Edit measurements for row ${index + 1}`}
-                  onPress={() => {
-                    setFeedback("");
-                    setEdit({ id: entry.entry_id, row: index + 1, dbh: String(entry.dbh_cm), height: entry.height_m?.toString() ?? "" });
-                    scrollRef.current?.scrollTo({ y: 0 });
-                  }}
-                  style={styles.editCell}>
-                  <Text style={{ color: c.accent }}>Edit</Text>
-                </Pressable>
-              </View>
+
+              </Pressable>
             ))}
             {summaries.map(({ name, label }) => (
               <View key={name} role="row" style={[styles.row, { backgroundColor: c.bg, borderColor: c.border }]}>
